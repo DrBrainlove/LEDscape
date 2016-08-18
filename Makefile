@@ -7,24 +7,12 @@ TARGETS += opc-server
 LEDSCAPE_OBJS = ledscape.o pru.o util.o lib/cesanta/frozen.o lib/cesanta/mongoose.o
 LEDSCAPE_LIB := libledscape.a
 
-PRU_TEMPLATES := $(wildcard pru/templates/*.p)
-EXPANDED_PRU_TEMPLATES := $(addprefix pru/generated/, $(notdir $(PRU_TEMPLATES:.p=.template)))
+all: pasm $(TARGETS) pru-js ledscape.service
 
-all: $(TARGETS) all_pru_templates ledscape.service
+# Used to include npm-install, but now they're checked in
+pru-js: typescript-compile
 
-ifeq ($(shell uname -m),armv7l)
-# We are on the BeagleBone Black itself;
-# do not cross compile.
 export CROSS_COMPILE:=
-else
-# We are not on the BeagleBone and might be cross compiling.
-# If the environment does not set CROSS_COMPILE, set our
-# own.  Install a cross compiler with something like:
-#
-# sudo apt-get install gcc-arm-linux-gnueabi
-#
-export CROSS_COMPILE?=arm-linux-gnueabi-
-endif
 
 CFLAGS += \
 	-std=c99 \
@@ -63,34 +51,18 @@ APP_LOADER_LIB := $(APP_LOADER_DIR)/lib/libprussdrv.a
 CFLAGS += -I$(APP_LOADER_DIR)/include
 LDLIBS += $(APP_LOADER_LIB) -lm
 
-#####
-#
-# The TI PRU assembler looks like it has macros and includes,
-# but it really doesn't.  So instead we use cpp to pre-process the
-# file and then strip out all of the directives that it adds.
-# PASM also doesn't handle multiple statements per line, so we
-# insert hard newline characters for every ; in the file.
-#
-PASM_DIR ?= ./am335x/pasm
-PASM := $(PASM_DIR)/pasm
+PASM_DIR = ./am335x/pasm
 
-pru/generated/%.template: pru/templates/%.p pru/templates/common.p.h
-	$(eval TEMPLATE_NAME := $(basename $(notdir $@)))
-	mkdir -p pru/generated
-	pru/build_template.sh $(TEMPLATE_NAME)
-	touch $@
-	$(MAKE) `ls pru/generated | egrep '^$(TEMPLATE_NAME).*\.p$$' | sed 's/.p$$/.bin/' | sed -E 's/(.*)/pru\/generated\/\1/'`
 
-all_pru_templates: $(EXPANDED_PRU_TEMPLATES)
+npm-install:
+	cd pru; npm install
 
-%.bin: %.p $(PASM)
-	mkdir -p pru/bin
-	cd `dirname $@` && gcc -E - < $(notdir $<) | perl -p -e 's/^#.*//; s/;/\n/g; s/BYTE\((\d+)\)/t\1/g' > $(notdir $<).i
-	$(PASM) -V3 -b $<.i pru/bin/$(notdir $(basename $@))
-	#$(RM) $<.i
+typescript-compile:
+	cd pru; echo "Compiling Typescript..."; node_modules/typescript/bin/tsc --diagnostics
 
 %.o: %.c
 	$(COMPILE.o)
+
 
 libledscape.a: $(LEDSCAPE_OBJS)
 	$(RM) $@
@@ -120,7 +92,12 @@ clean:
 		lib/cesanta/*.o \
 		pru/generated \
 		pru/bin \
-		ledscape.service
+		ledscape.service \
+		pru/*.js \
+		pru/*.js.map \
+		pru/jstemplates/*.js \
+        pru/jstemplates/*.js.map \
+		pru/tmp
 	cd am335x/app_loader/interface && $(MAKE) clean
 	cd am335x/pasm && $(MAKE) clean
 
@@ -147,7 +124,7 @@ dts: LEDscape.dts
 $(APP_LOADER_LIB):
 	$(MAKE) -C $(APP_LOADER_DIR)/interface
 
-$(PASM):
+pasm:
 	$(MAKE) -C $(PASM_DIR)
 
 # Include all of the generated dependency files
