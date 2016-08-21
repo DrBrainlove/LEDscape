@@ -2,7 +2,7 @@
 	"outputMode": "apa102sc",
 	"outputMapping": "brainlove-cape",
 	"demoMode": "fade",
-	"ledsPerStrip": 512,
+	"ledsPerStrip": 256,
 	"usedStripCount": 48,
 	"colorChannelOrder": "RGB",
 	"opcTcpPort": 7890,
